@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" fill="none">
+  <rect x="0" y="0" width="56" height="56" rx="14" fill="#0500FF"/>
+  <path d="M14 18 L28 32 L42 18 M28 32 L28 44" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="68" y="36" font-family="Geist, Inter, sans-serif" font-size="22" font-weight="700" fill="currentColor" letter-spacing="-0.01em">ThriveSolo</text>
+</svg>

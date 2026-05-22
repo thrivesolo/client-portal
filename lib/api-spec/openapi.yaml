@@ -1,0 +1,769 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: portal-admin
+    description: Admin endpoints for managing clients and checklists
+  - name: portal-client
+    description: Public endpoints for client magic-link portal access
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /portal/admin/clients:
+    get:
+      operationId: listAdminClients
+      tags: [portal-admin]
+      summary: List all clients
+      description: Returns all clients pulled from Notion (cached locally) with progress data.
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminClientSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createAdminClient
+      tags: [portal-admin]
+      summary: Manually create a client (for testing)
+      description: Creates a new client locally without syncing from Notion. Useful for testing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "201":
+          description: Client created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminClientSummary"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Client with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /portal/admin/clients/sync:
+    post:
+      operationId: syncAdminClients
+      tags: [portal-admin]
+      summary: Re-sync clients from Notion
+      description: Pulls the latest client list from the Notion clients database into the local cache.
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/clients/{clientId}:
+    get:
+      operationId: getAdminClient
+      tags: [portal-admin]
+      summary: Get full client detail
+      description: Returns the client with their current intake session and checklist items.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminClientDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /portal/admin/clients/{clientId}/generate-checklist:
+    post:
+      operationId: generateChecklist
+      tags: [portal-admin]
+      summary: Generate AI checklist draft
+      description: Uses an LLM to draft a checklist of documents needed from this client based on their Notion profile. Replaces any existing draft items for the current intake session.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Generated checklist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminClientDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Cannot regenerate after publish
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /portal/admin/clients/{clientId}/items:
+    post:
+      operationId: createChecklistItem
+      tags: [portal-admin]
+      summary: Create a new checklist item
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChecklistItemDraft"
+      responses:
+        "201":
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/items/{itemId}:
+    patch:
+      operationId: updateChecklistItem
+      tags: [portal-admin]
+      summary: Edit a checklist item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChecklistItemUpdate"
+      responses:
+        "200":
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteChecklistItem
+      tags: [portal-admin]
+      summary: Delete a checklist item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/items/{itemId}/review:
+    post:
+      operationId: toggleItemReviewed
+      tags: [portal-admin]
+      summary: Toggle reviewed status on an item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToggleReviewedRequest"
+      responses:
+        "200":
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChecklistItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/clients/{clientId}/publish:
+    post:
+      operationId: publishChecklist
+      tags: [portal-admin]
+      summary: Approve & publish the checklist
+      description: Locks the checklist and creates a magic-link token for the client.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Published with magic link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "400":
+          description: Cannot publish (e.g. missing Drive folder, no items)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /portal/admin/clients/{clientId}/revoke:
+    post:
+      operationId: revokeChecklistLink
+      tags: [portal-admin]
+      summary: Revoke the active magic link
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/clients/{clientId}/send-link:
+    post:
+      operationId: sendChecklistEmail
+      tags: [portal-admin]
+      summary: Email the magic link to the client
+      description: Sends the magic-link URL to the client via the configured email integration (Gmail).
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Email sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSendResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/admin/clients/{clientId}/preview-session:
+    post:
+      operationId: createAdminPreviewSession
+      tags: [portal-admin]
+      summary: Open a read-only "view as client" preview
+      description: Mints a short-lived admin preview portal session for the given client and sets the portal session cookie. The admin can then open the client portal in a new tab to see exactly what the client sees.
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preview session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPreviewSessionResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /portal/admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      tags: [portal-admin]
+      summary: Admin dashboard summary
+      description: Aggregated counts and recent activity for the admin landing page.
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/client/session:
+    get:
+      operationId: getClientSession
+      tags: [portal-client]
+      summary: Get the current client session
+      description: Returns the authenticated client's checklist based on their magic-link cookie.
+      responses:
+        "200":
+          description: Client checklist view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientChecklistView"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/client/exit-preview:
+    post:
+      operationId: exitClientPreview
+      tags: [portal-client]
+      summary: End an admin preview session
+      description: Clears the admin-preview cookie and revokes the preview session row. Only valid when the active session is an admin preview.
+      responses:
+        "204":
+          description: Preview ended
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /portal/client/redeem:
+    post:
+      operationId: redeemMagicLink
+      tags: [portal-client]
+      summary: Redeem a magic-link token
+      description: Validates the token, sets a short-lived signed session cookie, and returns the client checklist.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemMagicLinkRequest"
+      responses:
+        "200":
+          description: Token accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientChecklistView"
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+components:
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ToggleReviewedRequest:
+      type: object
+      required: [reviewed]
+      properties:
+        reviewed:
+          type: boolean
+
+    RedeemMagicLinkRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    SyncResult:
+      type: object
+      required: [synced, source]
+      properties:
+        synced:
+          type: integer
+        source:
+          type: string
+          enum: [notion, mock]
+
+    UploadedFile:
+      type: object
+      required: [filename, driveFileId, size, uploadedAt]
+      properties:
+        filename:
+          type: string
+        driveFileId:
+          type: string
+        driveFileUrl:
+          type: ["string", "null"]
+        size:
+          type: integer
+        uploadedAt:
+          type: string
+          format: date-time
+
+    ChecklistItem:
+      type: object
+      required: [id, title, description, category, whyWeNeedThis, status, position, files]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        whyWeNeedThis:
+          type: string
+        status:
+          type: string
+          enum: [needed, uploaded, reviewed]
+        position:
+          type: integer
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadedFile"
+
+    ChecklistItemDraft:
+      type: object
+      required: [title, description, category, whyWeNeedThis]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        whyWeNeedThis:
+          type: string
+        position:
+          type: ["integer", "null"]
+
+    ChecklistItemUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        whyWeNeedThis:
+          type: string
+        position:
+          type: integer
+
+    CreateClientRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+          minLength: 1
+        priorReturnSummary:
+          type: ["string", "null"]
+        driveFolderId:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+
+    AdminClientSummary:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - tags
+        - hasDriveFolder
+        - itemsTotal
+        - itemsReceived
+        - itemsReviewed
+        - status
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        hasDriveFolder:
+          type: boolean
+        itemsTotal:
+          type: integer
+        itemsReceived:
+          type: integer
+        itemsReviewed:
+          type: integer
+        status:
+          type: string
+          enum: [draft, published, archived, no_session]
+        lastUploadAt:
+          type: ["string", "null"]
+          format: date-time
+        publishedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    AdminClientDetail:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - tags
+        - hasDriveFolder
+        - filingYear
+        - status
+        - items
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        hasDriveFolder:
+          type: boolean
+        priorReturnSummary:
+          type: ["string", "null"]
+        filingYear:
+          type: integer
+        status:
+          type: string
+          enum: [draft, published, archived]
+        publishedAt:
+          type: ["string", "null"]
+          format: date-time
+        magicLinkUrl:
+          type: ["string", "null"]
+        magicLinkExpiresAt:
+          type: ["string", "null"]
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecklistItem"
+
+    PublishResult:
+      type: object
+      required: [magicLinkUrl, expiresAt]
+      properties:
+        magicLinkUrl:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    EmailSendResult:
+      type: object
+      required: [sent, recipient, mode]
+      properties:
+        sent:
+          type: boolean
+        recipient:
+          type: string
+        mode:
+          type: string
+          enum: [gmail, mock]
+        previewBody:
+          type: ["string", "null"]
+
+    AdminDashboardActivity:
+      type: object
+      required: [clientId, clientName, filename, uploadedAt]
+      properties:
+        clientId:
+          type: string
+        clientName:
+          type: string
+        filename:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    AdminDashboard:
+      type: object
+      required:
+        - totalClients
+        - publishedSessions
+        - itemsNeeded
+        - itemsReceived
+        - itemsReviewed
+        - recentActivity
+      properties:
+        totalClients:
+          type: integer
+        publishedSessions:
+          type: integer
+        itemsNeeded:
+          type: integer
+        itemsReceived:
+          type: integer
+        itemsReviewed:
+          type: integer
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminDashboardActivity"
+
+    ClientChecklistItemView:
+      type: object
+      required: [id, title, description, category, whyWeNeedThis, status, files]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        whyWeNeedThis:
+          type: string
+        status:
+          type: string
+          enum: [needed, uploaded, reviewed]
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadedFile"
+
+    ClientChecklistView:
+      type: object
+      required:
+        - clientFirstName
+        - clientFullName
+        - filingYear
+        - itemsTotal
+        - itemsCompleted
+        - items
+        - mode
+      properties:
+        clientFirstName:
+          type: string
+        clientFullName:
+          type: string
+        filingYear:
+          type: integer
+        itemsTotal:
+          type: integer
+        itemsCompleted:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientChecklistItemView"
+        mode:
+          type: string
+          enum: [client, admin_preview]
+        adminDisplayName:
+          type: ["string", "null"]
+        sessionStatus:
+          type: string
+          enum: [draft, published, archived, no_session]
+
+    AdminPreviewSessionResult:
+      type: object
+      required: [previewUrl, expiresAt, clientName]
+      properties:
+        previewUrl:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        clientName:
+          type: string
